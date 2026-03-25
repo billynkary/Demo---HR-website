@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HR 工具｜名單抽籤與分組</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="header__brand">
+          <span class="header__logo" aria-hidden="true">◇</span>
+          <div>
+            <h1 class="header__title">HR 工具</h1>
+            <p class="header__subtitle">名單來源 · 獎品抽籤 · 自動分組</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="panel panel--source" aria-labelledby="source-heading">
+          <h2 id="source-heading" class="panel__title">名單來源</h2>
+          <p class="panel__hint">
+            上傳 CSV（第一欄為姓名，或以逗號分隔），或直接貼上姓名（一行一位）。
+          </p>
+          <div class="source-actions">
+            <label class="btn btn--secondary file-btn">
+              <input type="file" id="csv-file" accept=".csv,text/csv" hidden />
+              上傳 CSV
+            </label>
+            <button type="button" class="btn btn--secondary" id="btn-demo">
+              載入模擬名單
+            </button>
+            <button type="button" class="btn btn--ghost" id="clear-list">清空名單</button>
+          </div>
+          <label class="field">
+            <span class="field__label">貼上名單</span>
+            <textarea
+              id="name-textarea"
+              class="textarea"
+              rows="8"
+              placeholder="王小明&#10;李小華&#10;張三"
+              spellcheck="false"
+            ></textarea>
+          </label>
+          <div class="stats">
+            <span class="stats__item"
+              >目前人數：<strong id="name-count">0</strong>
+              <span id="name-count-extra" class="stats__item--muted stats__inline-extra" hidden></span>
+            </span>
+            <span class="stats__item stats__item--muted" id="parse-note"></span>
+          </div>
+          <div class="name-preview-wrap" id="name-preview-wrap" hidden>
+            <div class="name-preview-head">
+              <span class="name-preview__title">預覽名單</span>
+              <button type="button" class="btn btn--primary btn--sm" id="btn-dedupe" hidden>
+                移除重複姓名（保留首次出現）
+              </button>
+            </div>
+            <ul class="name-preview" id="name-preview" aria-label="名單預覽"></ul>
+          </div>
+        </section>
+
+        <nav class="tabs" role="tablist" aria-label="功能切換">
+          <button type="button" class="tabs__btn is-active" role="tab" aria-selected="true" data-tab="lottery">
+            獎品抽籤
+          </button>
+          <button type="button" class="tabs__btn" role="tab" aria-selected="false" data-tab="groups">
+            自動分組
+          </button>
+        </nav>
+
+        <section
+          id="tab-lottery"
+          class="panel tab-panel is-visible"
+          role="tabpanel"
+          aria-labelledby="tab-lottery-label"
+        >
+          <h2 id="tab-lottery-label" class="panel__title">獎品抽籤</h2>
+          <div class="lottery-grid">
+            <div class="lottery-settings">
+              <label class="field field--inline">
+                <span class="field__label">每次抽出</span>
+                <input type="number" id="draw-count" class="input input--sm" min="1" max="999" value="1" />
+                <span class="field__suffix">人</span>
+              </label>
+              <fieldset class="fieldset">
+                <legend class="fieldset__legend">抽取模式</legend>
+                <label class="radio">
+                  <input type="radio" name="draw-mode" value="unique" checked />
+                  <span>不重複（每人最多中一次）</span>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="draw-mode" value="repeat" />
+                  <span>可重複（同一人可多次中獎）</span>
+                </label>
+              </fieldset>
+              <button type="button" class="btn btn--primary btn--block" id="btn-draw">
+                開始抽籤
+              </button>
+              <button type="button" class="btn btn--ghost btn--block" id="btn-reset-pool">
+                重置獎池（還原所有人）
+              </button>
+            </div>
+            <div class="lottery-stage">
+              <div class="lottery-display" id="lottery-display" aria-live="polite">
+                <span class="lottery-display__idle">準備就緒</span>
+              </div>
+              <p class="lottery-meta" id="lottery-meta"></p>
+              <div class="winners" id="winners-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tab-groups" class="panel tab-panel" role="tabpanel" hidden>
+          <h2 class="panel__title">自動分組</h2>
+          <div class="group-controls">
+            <label class="field field--inline">
+              <span class="field__label">每組</span>
+              <input type="number" id="group-size" class="input input--sm" min="1" max="999" value="4" />
+              <span class="field__suffix">人</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="shuffle-groups" checked />
+              <span>分組前隨機洗牌</span>
+            </label>
+            <button type="button" class="btn btn--primary" id="btn-group">產生分組</button>
+            <button type="button" class="btn btn--secondary" id="btn-download-groups" disabled>
+              下載分組 CSV
+            </button>
+          </div>
+          <div class="groups-visual" id="groups-visual"></div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>資料僅在您的瀏覽器中處理，不會上傳至伺服器。</p>
+      </footer>
+    </div>
+    <script src="js/app.js" defer></script>
+  </body>
+</html>
