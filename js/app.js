@@ -26,9 +26,178 @@ function dedupePreserveOrder(arr) {
   return out;
 }
 
-/** @param {string} csvText */
-function parseCsvText(csvText) {
-  return parseNamesRaw(csvText);
+/**
+ * 解析單列 CSV（支援雙引號欄位內含逗號）。
+ * @param {string} line
+ * @returns {string[]}
+ */
+function parseCsvLine(line) {
+  const result = [];
+  let i = 0;
+  let cur = "";
+  let inQuotes = false;
+  const len = line.length;
+  while (i < len) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (i + 1 < len && line[i + 1] === '"') {
+          cur += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i++;
+        continue;
+      }
+      cur += c;
+      i++;
+    } else {
+      if (c === '"') {
+        inQuotes = true;
+        i++;
+        continue;
+      }
+      if (c === ",") {
+        result.push(cur.trim());
+        cur = "";
+        i++;
+        continue;
+      }
+      cur += c;
+      i++;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+/** @param {string} s */
+function normalizeHeaderToken(s) {
+  return String(s)
+    .replace(/^\uFEFF/, "")
+    .replace(/\u3000/g, " ")
+    .trim()
+    .replace(/\s+/g, "");
+}
+
+/**
+ * @param {string[]} headers
+ * @param {string[]} keys 欲比對的標題字（已去空白）
+ */
+function findColumnIndex(headers, keys) {
+  const cells = headers.map((h) => normalizeHeaderToken(h));
+  for (const key of keys) {
+    const k = normalizeHeaderToken(key);
+    const idx = cells.findIndex((c) => c === k);
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+/**
+ * 從 CSV 匯入姓名：優先尋找標題列中的「姓名」欄；若有「組別」「次序」則一併讀取並排序。
+ * 若找不到「姓名」標題，改為每列第一欄（與舊版相容）。
+ * @param {string} csvText
+ * @returns {{ names: string[], detail: string }}
+ */
+function importNamesFromCsv(csvText) {
+  const raw = String(csvText).replace(/^\uFEFF/, "");
+  const lines = raw.split(/\r?\n/);
+  /** @type {string[][]} */
+  const rows = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    rows.push(parseCsvLine(line));
+  }
+
+  if (rows.length === 0) {
+    return { names: [], detail: "檔案沒有可讀取的列。" };
+  }
+
+  const nameKeys = ["姓名", "名字"];
+  const groupKeys = ["組別"];
+  const orderKeys = ["次序"];
+
+  let headerRow = -1;
+  let nameCol = -1;
+  let groupCol = -1;
+  let orderCol = -1;
+
+  for (let r = 0; r < rows.length; r++) {
+    const nc = findColumnIndex(rows[r], nameKeys);
+    if (nc >= 0) {
+      headerRow = r;
+      nameCol = nc;
+      groupCol = findColumnIndex(rows[r], groupKeys);
+      orderCol = findColumnIndex(rows[r], orderKeys);
+      break;
+    }
+  }
+
+  if (headerRow < 0) {
+    const names = [];
+    for (const row of rows) {
+      if (row.length === 0) continue;
+      const cell = String(row[0] ?? "")
+        .trim()
+        .replace(/^["']|["']$/g, "");
+      if (cell) names.push(cell);
+    }
+    const detail =
+      names.length > 0
+        ? "未偵測到「姓名」標題列，已依每列第一欄匯入（與舊版相容）。"
+        : "無法從 CSV 讀取姓名。";
+    return { names, detail };
+  }
+
+  /** @type {{ name: string; g: number; o: number; _idx: number }[]} */
+  const records = [];
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (nameCol >= row.length) continue;
+    const name = String(row[nameCol] ?? "")
+      .trim()
+      .replace(/^["']|["']$/g, "");
+    if (!name) continue;
+
+    let g = 0;
+    let o = 0;
+    if (groupCol >= 0 && groupCol < row.length) {
+      const gn = parseInt(String(row[groupCol]).trim(), 10);
+      g = Number.isFinite(gn) ? gn : 0;
+    }
+    if (orderCol >= 0 && orderCol < row.length) {
+      const on = parseInt(String(row[orderCol]).trim(), 10);
+      o = Number.isFinite(on) ? on : 0;
+    }
+    records.push({ name, g, o, _idx: records.length });
+  }
+
+  const hasGroup = groupCol >= 0;
+  const hasOrder = orderCol >= 0;
+  if (hasGroup && hasOrder) {
+    records.sort((a, b) => a.g - b.g || a.o - b.o || a._idx - b._idx);
+  } else if (hasGroup) {
+    records.sort((a, b) => a.g - b.g || a._idx - b._idx);
+  } else if (hasOrder) {
+    records.sort((a, b) => a.o - b.o || a._idx - b._idx);
+  }
+
+  const names = records.map((r) => r.name);
+
+  let detail = `已依「姓名」欄匯入（偵測到標題列）。`;
+  if (hasGroup && hasOrder) {
+    detail += " 已依「組別」「次序」排序。";
+  } else if (hasGroup) {
+    detail += " 已依「組別」排序。";
+  } else if (hasOrder) {
+    detail += " 已依「次序」排序。";
+  } else {
+    detail += " 未含「組別／次序」欄，維持原列順序。";
+  }
+
+  return { names, detail };
 }
 
 /** @param {string[]} names */
@@ -316,12 +485,12 @@ $csvFile.addEventListener("change", async (e) => {
   if (!file) return;
   try {
     const text = await file.text();
-    const raw = parseCsvText(text);
+    const { names: raw, detail } = importNamesFromCsv(text);
     $textarea.value = raw.join("\n");
     syncFromTextarea();
     const uniq = dedupePreserveOrder(raw);
-    const dupHint = raw.length !== uniq.length ? `，偵測到重複（原始 ${raw.length} 筆，不重複 ${uniq.length} 人）` : "";
-    $parseNote.textContent = `已從 CSV 讀取 ${raw.length} 筆（取每列第一欄）${dupHint}。`;
+    const dupHint = raw.length !== uniq.length ? ` 偵測到重複（原始 ${raw.length} 筆，不重複 ${uniq.length} 人）。` : "";
+    $parseNote.textContent = `${detail} 共 ${raw.length} 筆。${dupHint}`;
   } catch {
     $parseNote.textContent = "無法讀取檔案。";
   }
