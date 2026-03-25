@@ -1,18 +1,22 @@
 # Demo - HR website
 
-Static HR tool: name lists (CSV / paste), lottery, auto grouping, CSV export.
+Static site: name lists, lottery, grouping. Open on any device via the link below.
 
-## Live link (phone or any device)
+## Live URL
 
 **https://billynkary.github.io/Demo---HR-website/**
 
-### Enable GitHub Pages (first time)
+## Enable GitHub Pages (one-time, no Actions required)
 
-1. Open: https://github.com/billynkary/Demo---HR-website
-2. Settings - Pages
-3. Build and deployment - Source: **GitHub Actions** (not Branch)
-4. After push to main, check Actions tab (~1-2 min)
+1. Open https://github.com/billynkary/Demo---HR-website
+2. **Settings** - **Pages** (left sidebar)
+3. Under **Build and deployment**:
+   - **Source**: select **Deploy from a branch** (not GitHub Actions)
+   - **Branch**: **main** / **/ (root)**
+4. Save. Wait ~1 minute, then open the Live URL above.
 
-### Local
+Push to **main** updates the site automatically.
 
-Open index.html in a browser.
+## Local
+
+Open `index.html` in your browser.
